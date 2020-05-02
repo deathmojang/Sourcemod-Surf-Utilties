@@ -38,10 +38,38 @@ public Action SurfPrepareAdvisor(Handle timer, any data)
 public Action SurfShowHud(Handle timer, any serial)
 {
 	int client = GetClientFromSerial(serial);
+	int minute;
+	float second;
+	char buffer[256];
 	
 	if(client == 0)
 	{
 		return Plugin_Stop;
+	}
+	
+	SetHudTextParams(0.46, 0.1, 3.0, 255,255,255,255, 0, 0.0, 0.0, 0.0);
+	
+	if(g_surfTimerEnabled[client] == 2)
+	{
+		ShowSyncHudText(client, g_syncHud, "\nStart Zone");
+		return Plugin_Continue;
+	}
+	else if (g_surfTimerEnabled[client] == 3)
+	{
+		ShowSyncHudText(client, g_syncHud, "\nEnd Zone");
+		return Plugin_Continue;
+	}
+	
+	GetClientName(client, buffer, sizeof(buffer));
+	GetCurrentElapsedTime(client, minute, second);
+	
+	if (g_surfPersonalBest[client] != 0.0)
+	{
+		ShowSyncHudText(client, g_syncHud, "Time: %02d:%06.3fs\nPB: %02d:%06.3fs\nPlayer: %s", minute, second, g_surfPersonalBestMinute[client], g_surfPersonalBestSecond[client], buffer);
+	}
+	else
+	{
+		ShowSyncHudText(client, g_syncHud, "Time: %02d:%06.3fs\nPlayer: %s", minute, second, buffer);
 	}
 	
 	return Plugin_Continue;

@@ -3,7 +3,7 @@
 #include <clientprefs>
 #include <devzones>
 
-#define VERSION "1.0.0"
+#define VERSION "1.1.0"
 
 #pragma newdecls required
 
@@ -34,6 +34,7 @@ char sql_insertScore[] = "INSERT INTO `rankings` SET `MapName`='%s', `UserName`=
 
 //Plugin cvars and cookies
 
+Handle g_cvarVersion = null;
 Handle g_cvarMode = null;
 Handle g_cookieHintMode = null;
 char g_cookieClientHintMode[MAXPLAYERS + 1] = { 0 };
@@ -67,8 +68,10 @@ public void OnPluginStart()
 	HookEvent("player_spawn", Event_PlayerSpawn);
 	HookEvent("player_death", Event_PlayerDeath);
 	
-	g_cvarMode = CreateConVar("sm_surfutil_hintmode", "1", "Whether the surf timer shows on hint message or not globally.");
+	g_cvarVersion = CreateConVar("sm_surfutil_version", VERSION, "Surf Utilities Plugin's Version", FCVAR_NOTIFY | FCVAR_REPLICATED);
+	g_cvarMode = CreateConVar("sm_surfutil_hudmode", "0", "Whether the surf timer shows on hint message or not globally.");
 	g_cookieHintMode = RegClientCookie("sm_surfutil_hint_mode", "Whether the surf timer shows on hint message or not.", CookieAccess_Protected);
+	SetCookiePrefabMenu(g_cookieHintMode, CookieMenu_YesNo_Int, "Surf Hint Mode");
 	RegConsoleCmd("sm_my_rank", MenuMyRank, "A panel shows your record on this map.");
 	RegConsoleCmd("sm_mr", MenuMyRank, "A panel shows your record on this map.");
 	RegConsoleCmd("sm_rank", MenuRank, "A panel shows server top record on this map.");
@@ -96,15 +99,15 @@ public void OnClientDisconnect(int client)
 		}
 	ClearSyncHud(client, g_syncHud);
 }
-
+/*
 public void OnClientCookiesCached(int client)
 {
 	char buffer[5];
 	GetClientCookie(client, g_cookieHintMode, buffer, sizeof(buffer));
 	if(buffer[0] == '\0')
-		g_cookieClientHintMode[client] = 1;
+		g_cookieClientHintMode[client] = GetConVarInt(g_cvarMode);
 }
-
+*/
 public void OnMapEnd()
 {
 	/**
@@ -119,6 +122,20 @@ public void OnMapEnd()
 public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(GetEventInt(event, "userid"));
+	
+	if(AreClientCookiesCached(client))
+	{
+		char buffer[5];
+		GetClientCookie(client, g_cookieHintMode, buffer, sizeof(buffer));
+		if(buffer[0] == '\0')
+		{
+			g_cookieClientHintMode[client] = GetConVarInt(g_cvarMode);
+		}
+		else
+		{
+			g_cookieClientHintMode[client] = StringToInt(buffer);
+		}
+	}
 	
 	SurfGetPersonalBest(client);
 	
@@ -163,7 +180,7 @@ public void Zone_OnClientEntry(int client, const char[] zone)
 		{
 			g_surfTimerPoint[client][1] = GetGameTime();
 			float scoredTime = g_surfTimerPoint[client][1] - g_surfTimerPoint[client][0];
-			PrintToChat(client, "%.3f", scoredTime);
+			PrintToChat(client, "You've reached to End Zone in %.3fs", scoredTime);
 			SurfRecordInsert(client, scoredTime);
 			SurfGetPersonalBest(client);
 		}
