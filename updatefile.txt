@@ -1,0 +1,20 @@
+"Updater"
+{
+	"Information"
+	{
+		"Version"
+		{
+			"Latest"	"1.2.1"
+		}
+		
+		"Notes"	"Cleaner Codes"
+	}
+	
+	"Files"
+	{
+		"Plugin"	"Path_SM/plugins/surf-utilties.smx"
+		"Source"	"Path_SM/scripting/surf-utilties.sp"
+		"Source"	"Path_SM/scripting/surf-utilties/hud.sp"
+		"Source"	"Path_SM/scripting/surf-utilties/menu.sp"
+	}
+}

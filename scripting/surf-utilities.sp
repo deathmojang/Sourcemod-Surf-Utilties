@@ -2,8 +2,11 @@
 #include <sourcemod>
 #include <clientprefs>
 #include <devzones>
+#undef REQUIRE_PLUGIN
+#include <updater>
 
-#define VERSION "1.1.0"
+#define VERSION "1.2.0"
+#define UPDATE_URL "https://raw.githubusercontent.com/deathmojang/Sourcemod-Surf-Utilities/master/updatefile.txt"
 
 #pragma newdecls required
 
@@ -25,7 +28,7 @@ char sql_createTables[] = "CREATE TABLE IF NOT EXISTS `rankings` ( \
 							`Score` float NOT NULL, \
 							PRIMARY KEY (`ID`) \
 						)";
-char sql_selectPlayerScore[] = "SELECT `TimeStamp`, `Score` FROM `rankings` WHERE `UserID`='%d';"; // Arg: String:UserID
+//char sql_selectPlayerScore[] = "SELECT `TimeStamp`, `Score` FROM `rankings` WHERE `UserID`='%d';"; // Arg: String:UserID
 char sql_selectPlayerScoreByMap[] = "SELECT `TimeStamp`, `Score` FROM `rankings` WHERE `UserID`='%d' AND `MapName`='%s' ORDER BY `Score` ASC;"; // Arg: int32:UserID String:MapName(Must be escaped)
 char sql_selectPersonalBestByMap[] = "SELECT `Score` FROM `rankings` WHERE `UserID`='%d' AND `MapName`='%s' ORDER BY `Score` ASC LIMIT 1;"; // Arg: int32:UserID String:MapName(Must be escaped)
 char sql_selectScore[] = "SELECT `rankings1`.`ID`, `rankings2`.`UserID`, `rankings1`.`UserName`, `rankings2`.`MinScore` FROM ( SELECT `UserID`, Min(`Score`) as `MinScore` FROM `rankings` WHERE `MapName`='%s' GROUP BY `UserID` ) as `rankings2` JOIN `rankings` as `rankings1` ON `rankings1`.`Score` = `rankings2`.`MinScore` WHERE `MapName`='%s' GROUP BY `UserID`;"; // Arg: String:Map
@@ -45,7 +48,7 @@ char g_cookieClientHintMode[MAXPLAYERS + 1] = { 0 };
 float g_surfPersonalBest[MAXPLAYERS + 1];
 int g_surfPersonalBestMinute[MAXPLAYERS + 1];
 float g_surfPersonalBestSecond[MAXPLAYERS + 1];
-float g_surfTimerPoint[MAXPLAYERS + 1][32];
+float g_surfTimerPoint[MAXPLAYERS + 1][2];
 char g_surfTimerEnabled[MAXPLAYERS + 1] = { 0 }; // 0 on Surfing 1 on after reaching end zone 2 on being at start zone 3 on being at end zone
 
 #include "surf-utilities/menu.sp"
@@ -61,35 +64,51 @@ public Plugin myinfo =
 };
 
 
-//Forwards (CallBack functions?)
+//Forwards
 
 public void OnPluginStart()
 {
+	if (LibraryExists("updater"))
+    {
+        Updater_AddPlugin(UPDATE_URL);
+    }
+	
 	HookEvent("player_spawn", Event_PlayerSpawn);
 	HookEvent("player_death", Event_PlayerDeath);
 	
 	g_cvarVersion = CreateConVar("sm_surfutil_version", VERSION, "Surf Utilities Plugin's Version", FCVAR_NOTIFY | FCVAR_REPLICATED);
 	g_cvarMode = CreateConVar("sm_surfutil_hudmode", "0", "Whether the surf timer shows on hint message or not globally.");
+	
 	g_cookieHintMode = RegClientCookie("sm_surfutil_hint_mode", "Whether the surf timer shows on hint message or not.", CookieAccess_Protected);
 	SetCookiePrefabMenu(g_cookieHintMode, CookieMenu_YesNo_Int, "Surf Hint Mode");
+	
 	RegConsoleCmd("sm_my_rank", MenuMyRank, "A panel shows your record on this map.");
 	RegConsoleCmd("sm_mr", MenuMyRank, "A panel shows your record on this map.");
 	RegConsoleCmd("sm_rank", MenuRank, "A panel shows server top record on this map.");
 	RegConsoleCmd("sm_wr", MenuRank, "A panel shows server top record on this map.");
 	
-	RequestDatabaseConnection();
-	CreateTimer(1.0, TimerRequestDatabaseConnection, _, TIMER_REPEAT);
-	
 	g_syncHud = CreateHudSynchronizer();
+}
+
+public void OnLibraryAdded(const char[] name)
+{
+    if (StrEqual(name, "updater"))
+    {
+        Updater_AddPlugin(UPDATE_URL);
+    }
 }
 
 public void OnClientPutInServer(int client)
 {
-	if(client < 1 || client > MaxClients || !IsClientInGame(client) || IsFakeClient(client)) 
+	if(IsInvalidClient(client)) 
 		return;
 	
 	g_surfPersonalBest[client] = 0.0;
-	g_surfTimerEnabled[client] = 3;
+	g_surfPersonalBestMinute[client] = 0;
+	g_surfPersonalBestSecond[client] = 0.0;
+	g_surfTimerEnabled[client] = 2;
+	g_surfTimerPoint[client][0] = 0.0;
+	g_surfTimerPoint[client][1] = 0.0;
 	SurfGetPersonalBest(client);
 }
 
@@ -101,6 +120,7 @@ public void OnClientDisconnect(int client)
 		}
 	ClearSyncHud(client, g_syncHud);
 }
+
 /*
 public void OnClientCookiesCached(int client)
 {
@@ -149,7 +169,7 @@ public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast
 	
 	SurfGetPersonalBest(client);
 	
-	if(client < 1 || client > MaxClients || !IsClientInGame(client) || IsFakeClient(client)) 
+	if(IsInvalidClient(client)) 
 		return;
 	
 	DataPack pack;
@@ -167,7 +187,7 @@ public void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast
 {
 	int client = GetClientOfUserId(GetEventInt(event, "userid"));
 	
-	if(client < 1 || client > MaxClients || !IsClientInGame(client) || IsFakeClient(client)) 
+	if(IsInvalidClient(client)) 
 		return;
 	
 	g_surfTimerEnabled[client] = 2;
@@ -175,7 +195,7 @@ public void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast
 
 public void Zone_OnClientEntry(int client, const char[] zone)
 {
-	if(client < 1 || client > MaxClients || !IsClientInGame(client) ||!IsPlayerAlive(client) || IsFakeClient(client)) 
+	if(IsInvalidClient(client)) 
 		return;
 	
 	if(StrContains(zone, "surf_start", true) == 0)
@@ -206,7 +226,7 @@ public void Zone_OnClientEntry(int client, const char[] zone)
 
 public void Zone_OnClientLeave(int client, const char[] zone)
 {
-	if(client < 1 || client > MaxClients || !IsClientInGame(client) ||!IsPlayerAlive(client) || IsFakeClient(client)) 
+	if(IsInvalidClient(client)) 
 		return;
 	
 	if(StrContains(zone, "surf_start", false) == 0)
@@ -230,6 +250,14 @@ public void Zone_OnClientLeave(int client, const char[] zone)
 
 ////////////////
 // Own Functions
+
+bool IsInvalidClient(int client)
+{
+	if(client < 1 || client > MaxClients || !IsClientInGame(client) || IsFakeClient(client)) 
+		return true;
+	else 
+		return false;
+}
 
 void GetCurrentElapsedTime(int client, int &minute, float &second)
 {
