@@ -5,7 +5,7 @@
 #undef REQUIRE_PLUGIN
 #include <updater>
 
-#define VERSION "1.2.0"
+#define VERSION "1.2.2"
 #define UPDATE_URL "http://fastdl.jobggun.top:8080/updater/updatefile.txt"
 
 #pragma newdecls required
