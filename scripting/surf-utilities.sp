@@ -77,17 +77,19 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_rank", MenuRank, "A panel shows server top record on this map.");
 	RegConsoleCmd("sm_wr", MenuRank, "A panel shows server top record on this map.");
 	
+	RequestDatabaseConnection();
 	CreateTimer(1.0, TimerRequestDatabaseConnection, _, TIMER_REPEAT);
 	
 	g_syncHud = CreateHudSynchronizer();
 }
 
-public void OnClientAuthorized(int client)
+public void OnClientPutInServer(int client)
 {
 	if(client < 1 || client > MaxClients || !IsClientInGame(client) || IsFakeClient(client)) 
 		return;
 	
 	g_surfPersonalBest[client] = 0.0;
+	g_surfTimerEnabled[client] = 3;
 	SurfGetPersonalBest(client);
 }
 
@@ -108,6 +110,12 @@ public void OnClientCookiesCached(int client)
 		g_cookieClientHintMode[client] = GetConVarInt(g_cvarMode);
 }
 */
+
+public void OnMapStart()
+{
+	RequestDatabaseConnection();
+	CreateTimer(1.0, TimerRequestDatabaseConnection, _, TIMER_REPEAT);
+}
 public void OnMapEnd()
 {
 	/**
@@ -136,6 +144,8 @@ public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast
 			g_cookieClientHintMode[client] = StringToInt(buffer);
 		}
 	}
+	
+	g_surfTimerEnabled[client] = 2;
 	
 	SurfGetPersonalBest(client);
 	
@@ -358,6 +368,8 @@ public void T_SurfGetPersonalBest(Database db, DBResultSet results, const char[]
 		LogError("Query failed! %s", error);
 		return;
 	}
+	
+	g_surfPersonalBest[client] = 0.0;
 	
 	if (SQL_FetchRow(results) && SQL_HasResultSet(results))
 	{
