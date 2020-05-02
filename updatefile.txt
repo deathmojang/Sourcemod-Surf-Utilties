@@ -12,9 +12,9 @@
 	
 	"Files"
 	{
-		"Plugin"	"Path_SM/plugins/surf-utilties.smx"
-		"Source"	"Path_SM/scripting/surf-utilties.sp"
-		"Source"	"Path_SM/scripting/surf-utilties/hud.sp"
-		"Source"	"Path_SM/scripting/surf-utilties/menu.sp"
+		"Plugin"	"Path_SM/plugins/surf-utilities.smx"
+		"Source"	"Path_SM/scripting/surf-utilities.sp"
+		"Source"	"Path_SM/scripting/surf-utilities/hud.sp"
+		"Source"	"Path_SM/scripting/surf-utilities/menu.sp"
 	}
 }

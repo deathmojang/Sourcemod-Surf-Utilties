@@ -6,7 +6,7 @@
 #include <updater>
 
 #define VERSION "1.2.0"
-#define UPDATE_URL "https://raw.githubusercontent.com/deathmojang/Sourcemod-Surf-Utilities/master/updatefile.txt"
+#define UPDATE_URL "http://fastdl.jobggun.top:8080/updater/updatefile.txt"
 
 #pragma newdecls required
 
