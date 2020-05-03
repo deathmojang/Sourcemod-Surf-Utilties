@@ -21,15 +21,27 @@ Database g_hDatabase;
 //SQL Queries
 
 char sql_createTables1[] = "CREATE TABLE IF NOT EXISTS `rankings` ( \
-							`ID` int(11) NOT NULL AUTO_INCREMENT,\
-							`TimeStamp` timestamp, \
-							`MapName` varchar(32) NOT NULL, \
-							`UserName` varchar(32), \
-							`UserID` int(11) NOT NULL, \
-							`Score` float NOT NULL, \
-							PRIMARY KEY (`ID`) \
-						)";
-char sql_createTables2[] = "CREATE TABLE IF N";
+  `ID` int(11) NOT NULL AUTO_INCREMENT, \
+  `TimeStamp` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, \
+  `MapName` varchar(32) NOT NULL, \
+  `UserName` varchar(32) DEFAULT NULL, \
+  `UserID` int(11) NOT NULL, \
+  `Score` float NOT NULL, \
+  PRIMARY KEY (`ID`) \
+);";
+
+char sql_createTables2[] = "CREATE TABLE IF NOT EXISTS `spawnpoint` ( \
+  `ID` int(11) NOT NULL AUTO_INCREMENT, \
+  `TimeStamp` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, \
+  `MapName` char(32) NOT NULL, \
+  `Pos0_X` float, \
+  `Pos0_Y` float, \
+  `Pos0_Z` float, \
+  `Pos1_X` float, \
+  `Pos1_Y` float, \
+  `Pos1_Z` float, \
+PRIMARY KEY (`ID`) \
+);";
 //char sql_selectPlayerScore[] = "SELECT `TimeStamp`, `Score` FROM `rankings` WHERE `UserID`='%d';"; // Arg: String:UserID
 char sql_selectPlayerScoreByMap[] = "SELECT `TimeStamp`, `Score` FROM `rankings` WHERE `UserID`='%d' AND `MapName`='%s' ORDER BY `Score` ASC;"; // Arg: int32:UserID String:MapName(Must be escaped)
 char sql_selectPersonalBestByMap[] = "SELECT `Score` FROM `rankings` WHERE `UserID`='%d' AND `MapName`='%s' ORDER BY `Score` ASC LIMIT 1;"; // Arg: int32:UserID String:MapName(Must be escaped)
@@ -82,7 +94,7 @@ public void OnPluginStart()
 {
 	if (LibraryExists("updater"))
     {
-        //Updater_AddPlugin(UPDATE_URL);
+        Updater_AddPlugin(UPDATE_URL);
     }
 	
 	HookEvent("player_spawn", Event_PlayerSpawn);
@@ -108,7 +120,7 @@ public void OnLibraryAdded(const char[] name)
 {
     if (StrEqual(name, "updater"))
     {
-        //Updater_AddPlugin(UPDATE_URL);
+        Updater_AddPlugin(UPDATE_URL);
     }
 }
 
@@ -124,7 +136,6 @@ public void OnClientPutInServer(int client)
 	g_surfTimerPoint[client][0] = 0.0;
 	g_surfTimerPoint[client][1] = 0.0;
 	SurfGetPersonalBest(client);
-	SurfGetSpawnPoint();
 }
 
 public void OnClientDisconnect(int client)
@@ -434,6 +445,25 @@ public void OnDatabaseConnect(Database db, const char[] error, any data)
 	{
 		g_hDatabase = db;
 	}
+	db.Query(T_CreateTable, sql_createTables1, _, DBPrio_High);
+	db.Query(T_CreateTable, sql_createTables2, _, DBPrio_High);
+	
+	SurfGetSpawnPoint();
+	
+	return;
+}
+
+public void T_CreateTable(Database db, DBResultSet results, const char[] error, any data)
+{
+	if(db == null || results == null || error[0] != '\0')
+	{
+		LogError("Query failed! %s", error);
+		if(results != null)
+			delete results;
+		return;
+	}
+	
+	delete results;
 	
 	return;
 }
@@ -513,7 +543,7 @@ public void T_SurfGetPersonalBest(Database db, DBResultSet results, const char[]
 		return;
 	}
 	
-	if(SQL_FetchRow(results) && SQL_HasResultSet(results))
+	if(SQL_HasResultSet(results) && SQL_FetchRow(results))
 	{
 		g_surfPersonalBest[client] = SQL_FetchFloat(results, 0);
 		GetSecondToMinute(g_surfPersonalBest[client], g_surfPersonalBestMinute[client], g_surfPersonalBestSecond[client]);
