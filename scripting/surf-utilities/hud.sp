@@ -94,7 +94,7 @@ public Action SurfShowHint(Handle timer, any serial)
 	int client = GetClientFromSerial(serial);
 	int minute;
 	float second;
-	char buffer[256];
+	char buffer[64];
 	
 	if(client == 0)
 	{

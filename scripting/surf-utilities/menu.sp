@@ -10,6 +10,9 @@ public int MenuMyRankHandler(Menu menu, MenuAction action, int param1, int param
 
 public Action MenuMyRank(int client, int args)
 {
+	if(IsInvalidClient(client)) 
+		return Plugin_Handled;
+	
 	char query[255];
 	char unescapedMap[32];
 	char Map[65];
@@ -17,10 +20,12 @@ public Action MenuMyRank(int client, int args)
 	if(!SQL_EscapeString(g_hDatabase, unescapedMap, Map, sizeof(Map)))
 	{
 		LogError("Escape Error");
-		return;
+		return Plugin_Handled;
 	}
 	FormatEx(query, sizeof(query), sql_selectPlayerScoreByMap, GetSteamAccountID(client), Map);
 	g_hDatabase.Query(T_MenuMyRankRetrive, query, GetClientSerial(client));
+	
+	return Plugin_Handled;
 }
 
 public void T_MenuMyRankRetrive(Database db, DBResultSet results, const char[] error, any data)
@@ -80,6 +85,9 @@ public int MenuRankHandler(Menu menu, MenuAction action, int param1, int param2)
 
 public Action MenuRank(int client, int args)
 {
+	if(IsInvalidClient(client)) 
+		return Plugin_Handled;
+	
 	DataPack pack = CreateDataPack();
 	char query[1024];
 	char unescapedMap[32];
@@ -89,12 +97,14 @@ public Action MenuRank(int client, int args)
 	if(!SQL_EscapeString(g_hDatabase, unescapedMap, Map, sizeof(Map)))
 	{
 		LogError("Escape Error");
-		return;
+		return Plugin_Handled;
 	}
 	FormatEx(query, sizeof(query), sql_selectScore, Map, Map);
 	pack.WriteCell(GetClientSerial(client));
 	pack.WriteString(unescapedMap);
 	g_hDatabase.Query(T_MenuRankRetrive, query, pack);
+	
+	return Plugin_Handled;
 }
 
 public void T_MenuRankRetrive(Database db, DBResultSet results, const char[] error, any data)

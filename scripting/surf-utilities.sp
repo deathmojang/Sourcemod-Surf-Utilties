@@ -2,10 +2,11 @@
 #include <sourcemod>
 #include <clientprefs>
 #include <devzones>
+#include <sdktools>
 #undef REQUIRE_PLUGIN
 #include <updater>
 
-#define VERSION "1.2.2"
+#define VERSION "1.3.0"
 #define UPDATE_URL "http://fastdl.jobggun.top:8080/updater/updatefile.txt"
 
 #pragma newdecls required
@@ -19,7 +20,7 @@ Database g_hDatabase;
 
 //SQL Queries
 
-char sql_createTables[] = "CREATE TABLE IF NOT EXISTS `rankings` ( \
+char sql_createTables1[] = "CREATE TABLE IF NOT EXISTS `rankings` ( \
 							`ID` int(11) NOT NULL AUTO_INCREMENT,\
 							`TimeStamp` timestamp, \
 							`MapName` varchar(32) NOT NULL, \
@@ -28,12 +29,18 @@ char sql_createTables[] = "CREATE TABLE IF NOT EXISTS `rankings` ( \
 							`Score` float NOT NULL, \
 							PRIMARY KEY (`ID`) \
 						)";
+char sql_createTables2[] = "CREATE TABLE IF N";
 //char sql_selectPlayerScore[] = "SELECT `TimeStamp`, `Score` FROM `rankings` WHERE `UserID`='%d';"; // Arg: String:UserID
 char sql_selectPlayerScoreByMap[] = "SELECT `TimeStamp`, `Score` FROM `rankings` WHERE `UserID`='%d' AND `MapName`='%s' ORDER BY `Score` ASC;"; // Arg: int32:UserID String:MapName(Must be escaped)
 char sql_selectPersonalBestByMap[] = "SELECT `Score` FROM `rankings` WHERE `UserID`='%d' AND `MapName`='%s' ORDER BY `Score` ASC LIMIT 1;"; // Arg: int32:UserID String:MapName(Must be escaped)
 char sql_selectScore[] = "SELECT `rankings1`.`ID`, `rankings2`.`UserID`, `rankings1`.`UserName`, `rankings2`.`MinScore` FROM ( SELECT `UserID`, Min(`Score`) as `MinScore` FROM `rankings` WHERE `MapName`='%s' GROUP BY `UserID` ) as `rankings2` JOIN `rankings` as `rankings1` ON `rankings1`.`Score` = `rankings2`.`MinScore` WHERE `MapName`='%s' GROUP BY `UserID`;"; // Arg: String:Map
 char sql_selectScoreByID[] = "SELECT `UserName`, `UserID`, `MapName`, `Score`, `TimeStamp` FROM `rankings` WHERE `ID`='%d';"; // Arg int32:ID
 char sql_insertScore[] = "INSERT INTO `rankings` SET `MapName`='%s', `UserName`= '%s', `UserID`='%d', `Score`='%.3f';"; // Arg: int32:UserID, float32:Score
+
+char sql_selectSpawnPointByMapName[] = "SELECT `ID`, `Pos0_X`, `Pos0_Y`, `Pos0_Z`, `Pos1_X`, `Pos1_Y`, `Pos1_Z` FROM `spawnpoint` WHERE `MapName`='%s';";
+char sql_insertSpawnPointByMapName[] = "INSERT INTO `spawnpoint` SET `MapName`='%s', `Pos0_X`='%.3f', `Pos0_Y`='%.3f', `Pos0_Z`='%.3f', `Pos1_X`='%.3f', `Pos1_Y`='%.3f', `Pos1_Z`='%.3f';";
+char sql_insertSpawnPointByMapNameNull[] = "INSERT INTO `spawnpoint` SET `MapName`='%s';";
+char sql_updateSpawnPointByMapName[] = "UPDATE `spawnpoint` SET `Pos%1d_X`='%.3f', `Pos%1d_Y`='%.3f', `Pos%1d_Z`='%.3f' WHERE `MapName`='%s';"; // Arg int:index float:Vector[0] int:index float:Vector[1] int:index float:Vector[2] MapName
 
 //Plugin cvars and cookies
 
@@ -50,6 +57,11 @@ int g_surfPersonalBestMinute[MAXPLAYERS + 1];
 float g_surfPersonalBestSecond[MAXPLAYERS + 1];
 float g_surfTimerPoint[MAXPLAYERS + 1][2];
 char g_surfTimerEnabled[MAXPLAYERS + 1] = { 0 }; // 0 on Surfing 1 on after reaching end zone 2 on being at start zone 3 on being at end zone
+
+//Surf Spawn Point Variable
+
+bool g_surfSpawnPointEnabled[2] = { false };
+float g_surfSpawnPointPos[2][3];
 
 #include "surf-utilities/menu.sp"
 #include "surf-utilities/hud.sp"
@@ -70,7 +82,7 @@ public void OnPluginStart()
 {
 	if (LibraryExists("updater"))
     {
-        Updater_AddPlugin(UPDATE_URL);
+        //Updater_AddPlugin(UPDATE_URL);
     }
 	
 	HookEvent("player_spawn", Event_PlayerSpawn);
@@ -87,6 +99,8 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_rank", MenuRank, "A panel shows server top record on this map.");
 	RegConsoleCmd("sm_wr", MenuRank, "A panel shows server top record on this map.");
 	
+	RegConsoleCmd("sm_setspawnpoint", CommandSetSpawnPoint, "A Command which sets your position to SpawnPoint (Removal should be done manually)");
+	
 	g_syncHud = CreateHudSynchronizer();
 }
 
@@ -94,7 +108,7 @@ public void OnLibraryAdded(const char[] name)
 {
     if (StrEqual(name, "updater"))
     {
-        Updater_AddPlugin(UPDATE_URL);
+        //Updater_AddPlugin(UPDATE_URL);
     }
 }
 
@@ -110,6 +124,7 @@ public void OnClientPutInServer(int client)
 	g_surfTimerPoint[client][0] = 0.0;
 	g_surfTimerPoint[client][1] = 0.0;
 	SurfGetPersonalBest(client);
+	SurfGetSpawnPoint();
 }
 
 public void OnClientDisconnect(int client)
@@ -151,6 +166,9 @@ public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast
 {
 	int client = GetClientOfUserId(GetEventInt(event, "userid"));
 	
+	if(IsInvalidClient(client)) 
+		return;
+	
 	if(AreClientCookiesCached(client))
 	{
 		char buffer[5];
@@ -165,12 +183,49 @@ public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast
 		}
 	}
 	
+	/* Not Implemented
+	if(Zone_CheckIfZoneExists("surf_spawn_1", true) && Zone_CheckIfZoneExists("surf_spawn_2", true))
+	{
+		int clientTeam = GetClientTeam(client);
+		float pos[3];
+		
+		if(clientTeam == 2)
+		{
+			Zone_GetZonePosition("surf_spawn_1", false, pos);
+			TeleportEntity(client, pos, NULL_VECTOR, NULL_VECTOR);
+		}
+		else if(clientTeam == 3)
+		{
+			Zone_GetZonePosition("surf_spawn_2", false, pos);
+			TeleportEntity(client, pos, NULL_VECTOR, NULL_VECTOR);
+		}
+	}
+	*/
+	
+	if(g_surfSpawnPointEnabled[0])
+	{
+		if(g_surfSpawnPointEnabled[1])
+		{
+			int clientTeam = GetClientTeam(client);
+			
+			if(clientTeam == 2)
+			{
+				TeleportEntity(client, g_surfSpawnPointPos[0], NULL_VECTOR, NULL_VECTOR);
+			}
+			else if(clientTeam == 3)
+			{
+				TeleportEntity(client, g_surfSpawnPointPos[1], NULL_VECTOR, NULL_VECTOR);
+			}
+		}
+		else
+		{
+			TeleportEntity(client, g_surfSpawnPointPos[0], NULL_VECTOR, NULL_VECTOR);
+		}
+	}
+	
 	g_surfTimerEnabled[client] = 2;
 	
 	SurfGetPersonalBest(client);
-	
-	if(IsInvalidClient(client)) 
-		return;
 	
 	DataPack pack;
 	
@@ -211,7 +266,7 @@ public void Zone_OnClientEntry(int client, const char[] zone)
 			g_surfTimerPoint[client][1] = GetGameTime();
 			float scoredTime = g_surfTimerPoint[client][1] - g_surfTimerPoint[client][0];
 			PrintToChat(client, "You've reached to End Zone in %.3fs", scoredTime);
-			SurfRecordInsert(client, scoredTime);
+			SurfSetRecord(client, scoredTime);
 			SurfGetPersonalBest(client);
 		}
 		g_surfTimerEnabled[client] = 3;
@@ -248,7 +303,8 @@ public void Zone_OnClientLeave(int client, const char[] zone)
 	}
 }
 
-////////////////
+
+///////////////////////
 // Own Functions
 
 bool IsInvalidClient(int client)
@@ -270,11 +326,59 @@ void GetCurrentElapsedTime(int client, int &minute, float &second)
 	}
 	float delta = GetGameTime() - g_surfTimerPoint[client][0];
 	
-	minute = RoundToFloor(delta) / 60;
-	second = delta - minute * 60.0;
+	GetSecondToMinute(delta, minute, second);
 	
 	return;
 }
+
+void GetSecondToMinute(float input, int &minute, float &second)
+{	
+	minute = RoundToFloor(input) / 60;
+	second = input - minute * 60.0;
+	
+	return;
+}
+
+public Action CommandSetSpawnPoint(int client, int args)
+{
+	if(IsInvalidClient(client))
+	{
+		ReplyToCommand(client, "[SM] This command is for ingame usage.");
+		return Plugin_Handled;
+	}
+	
+	if(args != 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_setspawnpoint [0-1] (0 for RED&T, 1 for BLU&CT)");
+		return Plugin_Handled;
+	}
+	
+	char buffer[16];
+	int index;
+	float Pos[3];
+	
+	GetCmdArg(1, buffer, sizeof(buffer));
+	index = StringToInt(buffer);
+	
+	if(index < 0 || index > 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_setspawnpoint [0-1] (0 for RED&T, 1 for BLU&CT)");
+		return Plugin_Handled;
+	}
+	
+	GetClientAbsOrigin(client, Pos);
+	
+	SurfSetSpawnPoint(index, Pos);
+	SurfGetSpawnPoint();
+	
+	ReplyToCommand(client, "[SM] It has been set successfully.");
+	
+	return Plugin_Handled;
+}
+
+
+///////////////////////////
+// Database Functions
 
 public Action TimerRequestDatabaseConnection(Handle timer)
 {
@@ -294,7 +398,7 @@ void RequestDatabaseConnection()
 {
 	g_connectLock = ++g_sequence;
 	
-	if (SQL_CheckConfig("surf"))
+	if(SQL_CheckConfig("surf"))
 	{
 		Database.Connect(OnDatabaseConnect, "surf", g_connectLock);
 	} else {
@@ -310,7 +414,7 @@ public void OnDatabaseConnect(Database db, const char[] error, any data)
 	 * If there is difference between data(old connectLock) and connectLock, It might be replaced by other thread.
 	 * If g_hDatabase is not null, Threaded job is running now.
 	 */
-	if (data != g_connectLock || g_hDatabase != null)
+	if(data != g_connectLock || g_hDatabase != null)
 	{
 		delete db;
 		return;
@@ -330,9 +434,11 @@ public void OnDatabaseConnect(Database db, const char[] error, any data)
 	{
 		g_hDatabase = db;
 	}
+	
+	return;
 }
 
-void SurfRecordInsert(int client, float timeScored)
+void SurfSetRecord(int client, float timeScored)
 {
 	char query[255];
 	char unescapedName[32], unescapedMap[32];
@@ -348,21 +454,27 @@ void SurfRecordInsert(int client, float timeScored)
 	}
 	
 	FormatEx(query, sizeof(query), sql_insertScore, Map, Name, GetSteamAccountID(client), timeScored);
-	g_hDatabase.Query(T_SurfRecordInsert, query, GetClientSerial(client));
+	g_hDatabase.Query(T_SurfSetRecord, query, GetClientSerial(client));
+	
+	return;
 }
 
-public void T_SurfRecordInsert(Database db, DBResultSet results, const char[] error, any data)
+public void T_SurfSetRecord(Database db, DBResultSet results, const char[] error, any data)
 {
-	if (GetClientFromSerial(data) == 0)
+	if(GetClientFromSerial(data) == 0)
 		return;
 	
-	if (db == null || results == null || error[0] != '\0')
+	if(db == null || results == null || error[0] != '\0')
 	{
 		LogError("Query failed! %s", error);
+		if(results != null)
+			delete results;
 		return;
 	}
 	
 	delete results;
+	
+	return;
 }
 
 void SurfGetPersonalBest(int client)
@@ -380,6 +492,8 @@ void SurfGetPersonalBest(int client)
 	
 	FormatEx(query, sizeof(query), sql_selectPersonalBestByMap, GetSteamAccountID(client), Map);
 	g_hDatabase.Query(T_SurfGetPersonalBest, query, GetClientSerial(client));
+	
+	return;
 }
 
 public void T_SurfGetPersonalBest(Database db, DBResultSet results, const char[] error, any data)
@@ -391,20 +505,159 @@ public void T_SurfGetPersonalBest(Database db, DBResultSet results, const char[]
 		return;
 	}
 	
-	if (db == null || results == null || error[0] != '\0')
+	if(db == null || results == null || error[0] != '\0')
 	{
 		LogError("Query failed! %s", error);
+		if(results != null)
+			delete results;
 		return;
 	}
 	
-	g_surfPersonalBest[client] = 0.0;
-	
-	if (SQL_FetchRow(results) && SQL_HasResultSet(results))
+	if(SQL_FetchRow(results) && SQL_HasResultSet(results))
 	{
 		g_surfPersonalBest[client] = SQL_FetchFloat(results, 0);
-		g_surfPersonalBestMinute[client] = RoundToFloor(g_surfPersonalBest[client]) / 60;
-		g_surfPersonalBestSecond[client] = g_surfPersonalBest[client] - g_surfPersonalBestMinute[client] * 60;
+		GetSecondToMinute(g_surfPersonalBest[client], g_surfPersonalBestMinute[client], g_surfPersonalBestSecond[client]);
 	}
 	
 	delete results;
+	
+	return;
+}
+
+void SurfAddSpawnPointRecord()
+{
+	char query[256];
+	char unescapedMap[32];
+	char Map[65];
+	
+	GetCurrentMap(unescapedMap, sizeof(unescapedMap));
+	if(!SQL_EscapeString(g_hDatabase, unescapedMap, Map, sizeof(Map)))
+	{
+		LogError("Escape Error");
+		return;
+	}
+	
+	FormatEx(query, sizeof(query), sql_insertSpawnPointByMapNameNull, Map);
+	
+	g_hDatabase.Query(T_SurfGetSpawnPoint, query);
+	
+	return;
+}
+
+public void T_SurfAddSpawnPointRecord(Database db, DBResultSet results, const char[] error, any data)
+{
+	if (db == null || results == null || error[0] != '\0')
+	{
+		LogError("Query failed! %s", error);
+		if(results != null)
+			delete results;
+		return;
+	}
+	
+	delete results;
+	
+	
+}
+
+void SurfGetSpawnPoint()
+{
+	char query[256];
+	char unescapedMap[32];
+	char Map[65];
+	
+	GetCurrentMap(unescapedMap, sizeof(unescapedMap));
+	if(!SQL_EscapeString(g_hDatabase, unescapedMap, Map, sizeof(Map)))
+	{
+		LogError("Escape Error");
+		return;
+	}
+	
+	FormatEx(query, sizeof(query), sql_selectSpawnPointByMapName, Map);
+	
+	g_hDatabase.Query(T_SurfGetSpawnPoint, query);
+	
+	return;
+}
+
+public void T_SurfGetSpawnPoint(Database db, DBResultSet results, const char[] error, any data)
+{
+	if (db == null || results == null || error[0] != '\0')
+	{
+		LogError("Query failed! %s", error);
+		if(results != null)
+			delete results;
+		return;
+	}
+	
+	if(SQL_FetchRow(results) && SQL_HasResultSet(results))
+	{
+		if(!(SQL_IsFieldNull(results, 1) || SQL_IsFieldNull(results, 2) || SQL_IsFieldNull(results, 3)))
+		{
+			g_surfSpawnPointEnabled[0] = true;
+			g_surfSpawnPointPos[0][0] = SQL_FetchFloat(results, 1);
+			g_surfSpawnPointPos[0][1] = SQL_FetchFloat(results, 2);
+			g_surfSpawnPointPos[0][2] = SQL_FetchFloat(results, 3);
+		}
+		else
+		{
+			g_surfSpawnPointEnabled[0] = false;
+		}
+		if(!(SQL_IsFieldNull(results, 4) || SQL_IsFieldNull(results, 5) || SQL_IsFieldNull(results, 6)))
+		{
+			g_surfSpawnPointEnabled[1] = true;
+			g_surfSpawnPointPos[1][0] = SQL_FetchFloat(results, 4);
+			g_surfSpawnPointPos[1][1] = SQL_FetchFloat(results, 5);
+			g_surfSpawnPointPos[1][2] = SQL_FetchFloat(results, 6);
+		}
+		else
+		{
+			g_surfSpawnPointEnabled[1] = false;
+		}
+	}
+	else
+	{
+		SurfAddSpawnPointRecord();
+	}
+	
+	delete results;
+	
+	return;
+}
+
+void SurfSetSpawnPoint(int index, const float Pos[3])
+{
+	if(index < 0 || index > 1)
+		return;
+	
+	char query[256];
+	char unescapedMap[32];
+	char Map[65];
+	
+	GetCurrentMap(unescapedMap, sizeof(unescapedMap));
+	if(!SQL_EscapeString(g_hDatabase, unescapedMap, Map, sizeof(Map)))
+	{
+		LogError("Escape Error");
+		return;
+	}
+	
+	FormatEx(query, sizeof(query), sql_updateSpawnPointByMapName, index, Pos[0], index, Pos[1], index, Pos[2], Map);
+	
+	g_hDatabase.Query(T_SurfSetSpawnPoint, query);
+	
+	return;
+}
+
+public void T_SurfSetSpawnPoint(Database db, DBResultSet results, const char[] error, any data)
+{
+	if (db == null || results == null || error[0] != '\0')
+	{
+		LogError("Query failed! %s", error);
+		if(results != null)
+			delete results;
+		return;
+	}
+	
+	delete results;
+	
+	return;
 }
