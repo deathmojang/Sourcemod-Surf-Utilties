@@ -4,17 +4,20 @@
 	{
 		"Version"
 		{
-			"Latest"	"1.3.0"
+			"Latest"	"1.4.0"
 		}
 		
-		"Notes"	"Added Custom Spawn Point Ability"
+		"Notes"	"Recreated Menu Plugin (No crash and more efficient)"
+		"Notes"	"Minor Translation Support (for menu)"
 	}
 	
 	"Files"
 	{
 		"Plugin"	"Path_SM/plugins/surf-utilities.smx"
+		"Plugin"	"Path_SM/translations/surf-utilities.phrases.txt"
 		"Source"	"Path_SM/scripting/surf-utilities.sp"
 		"Source"	"Path_SM/scripting/surf-utilities/hud.sp"
 		"Source"	"Path_SM/scripting/surf-utilities/menu.sp"
+		"Source"	"Path_SM/scripting/surf-utilities/newmenu.sp"
 	}
 }

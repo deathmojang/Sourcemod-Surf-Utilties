@@ -1,0 +1,19 @@
+"Phrases"
+{
+	"MenuMyRankTitle"
+	{
+		"en"			"Your Record"
+		"ko"			"당신의 기록"
+	}
+	"MenuWorldRankTitle"
+	{
+		"#format"		"{1:s},{2:d}"
+		"en"			"Records For {1}:\n({2} records)"
+		"ko"			"{1} 맵의 기록:\n({2} 개의 기록)"
+	}
+	"ThereIsNothingToShow"
+	{
+		"en"			"There is Nothing To Show :("
+		"ko"			"보여줄 수 있는 기록이 없네요 :("
+	}
+}

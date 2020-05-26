@@ -1,9 +1,12 @@
+//#define _DEBUG
+
 Menu MenuHandler[MAXPLAYERS + 1] = { null };
 
 public int MenuMyRankHandler(Menu menu, MenuAction action, int param1, int param2)
 {
-	if (action == MenuAction_End)
+	if(action == MenuAction_Select || action == MenuAction_Cancel)
 	{
+		MenuHandler[param1] = null;
 		delete menu;
 	}
 }
@@ -12,6 +15,11 @@ public Action MenuMyRank(int client, int args)
 {
 	if(IsInvalidClient(client)) 
 		return Plugin_Handled;
+	
+	if(MenuHandler[client] != null)
+	{
+		CancelMenu(MenuHandler[client]);
+	}
 	
 	char query[255];
 	char unescapedMap[32];
@@ -41,21 +49,29 @@ public void T_MenuMyRankRetrive(Database db, DBResultSet results, const char[] e
 		return;
 	}
 	
-	Menu menu = new Menu(MenuMyRankHandler, MenuAction_Select|MenuAction_Cancel);
+	Menu menu = new Menu(MenuMyRankHandler, MenuAction_Select|MenuAction_Cancel|MenuAction_End);
 	
-	char buffer[256];
+	char buffer[256], buf[16];
 	char TimeStamp[32];
 	float Score;
+	int count = 0;
 	
 	while(SQL_FetchRow(results) && SQL_HasResultSet(results))
 	{
+		count++;
 		SQL_FetchString(results, 0, TimeStamp, sizeof(TimeStamp));
 		Score = SQL_FetchFloat(results, 1);
 		FormatEx(buffer, sizeof(buffer), "%s : %.3f sec", TimeStamp, Score);
-		menu.AddItem(buffer, buffer);
+		IntToString(count, buf, sizeof(buf));
+		menu.AddItem(buf, buffer);
 	}
 	
 	delete results;
+	
+	if(count == 0)
+	{
+		menu.AddItem("-1", "There is Nothing To Show :(", ITEMDRAW_DISABLED);
+	}
 	
 	menu.SetTitle("Your Record");
 	
@@ -69,12 +85,22 @@ public int MenuRankHandler(Menu menu, MenuAction action, int param1, int param2)
 		case MenuAction_Select:
 		{
 			char ID[16];
+			int IDInInt;
 			menu.GetItem(param2, ID, sizeof(ID));
-			MenuRankSubmenu(param1, StringToInt(ID)); // Param1 is client
+			
+			IDInInt = StringToInt(ID);
+			
+			if(IDInInt == -1)
+			{
+				menu.Display(param1, MENU_TIME_FOREVER);
+			}
+			
+			MenuRankSubmenu(param1, IDInInt); // Param1 is client
 		}
 		case MenuAction_Cancel:
 		{
-			delete MenuHandler[param1];
+			MenuHandler[param1] = null;
+			delete menu;
 		}
 		case MenuAction_End:
 		{
@@ -87,6 +113,11 @@ public Action MenuRank(int client, int args)
 {
 	if(IsInvalidClient(client)) 
 		return Plugin_Handled;
+	
+	if(MenuHandler[client] != null)
+	{
+		CancelMenu(MenuHandler[client]);
+	}
 	
 	DataPack pack = CreateDataPack();
 	char query[1024];
@@ -133,11 +164,12 @@ public void T_MenuRankRetrive(Database db, DBResultSet results, const char[] err
 	
 	while(SQL_FetchRow(results) && SQL_HasResultSet(results))
 	{
+		count++;
 		SQL_FetchString(results, 2, Name, sizeof(Name));
 		Score = SQL_FetchFloat(results, 3);
 		SQL_FetchString(results, 0, ID, sizeof(ID));
 		ScoreMinute = RoundToFloor(Score) / 60;
-		FormatEx(buffer, sizeof(buffer), "#%d - %s - %02d:%06.3f", ++count, Name, ScoreMinute, Score - ScoreMinute * 60.0);
+		FormatEx(buffer, sizeof(buffer), "#%d - %s - %02d:%06.3f", count, Name, ScoreMinute, Score - ScoreMinute * 60.0);
 		menu.AddItem(ID, buffer);
 	}
 	
@@ -145,7 +177,7 @@ public void T_MenuRankRetrive(Database db, DBResultSet results, const char[] err
 	
 	if(count == 0)
 	{
-		menu.AddItem("There is Nothing To Show :(", "There is Nothing To Show :(");
+		menu.AddItem("-1", "There is Nothing To Show :(", ITEMDRAW_DISABLED);
 	}
 	
 	pack.ReadString(Name, sizeof(Name));
@@ -214,9 +246,13 @@ public int MenuRankSubmenuHandler(Menu menu, MenuAction action, int param1, int 
 	if (action == MenuAction_Select || action == MenuAction_Cancel)
 	{
 		MenuHandler[param1].Display(param1, MENU_TIME_FOREVER);
-	} 
-	else if (action == MenuAction_End)
+	}
+	else if (action == MenuAction_Cancel)
 	{
 		delete menu;
+	}
+	else if (action == MenuAction_End)
+	{
+	
 	}
 }

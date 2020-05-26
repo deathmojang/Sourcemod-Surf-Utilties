@@ -6,7 +6,7 @@
 #undef REQUIRE_PLUGIN
 #include <updater>
 
-#define VERSION "1.3.0"
+#define VERSION "1.4.0"
 #define UPDATE_URL "http://fastdl.jobggun.top:8080/updater/updatefile.txt"
 
 #pragma newdecls required
@@ -53,6 +53,7 @@ char sql_selectSpawnPointByMapName[] = "SELECT `ID`, `Pos0_X`, `Pos0_Y`, `Pos0_Z
 char sql_insertSpawnPointByMapName[] = "INSERT INTO `spawnpoint` SET `MapName`='%s', `Pos0_X`='%.3f', `Pos0_Y`='%.3f', `Pos0_Z`='%.3f', `Pos1_X`='%.3f', `Pos1_Y`='%.3f', `Pos1_Z`='%.3f';";
 char sql_insertSpawnPointByMapNameNull[] = "INSERT INTO `spawnpoint` SET `MapName`='%s';";
 char sql_updateSpawnPointByMapName[] = "UPDATE `spawnpoint` SET `Pos%1d_X`='%.3f', `Pos%1d_Y`='%.3f', `Pos%1d_Z`='%.3f' WHERE `MapName`='%s';"; // Arg int:index float:Vector[0] int:index float:Vector[1] int:index float:Vector[2] MapName
+char sql_updateToNullSpawnPointByMapName[] = "UPDATE `spawnpoint` SET `Pos%1d_X`='', `Pos%1d_Y`='', `Pos%1d_Z`='' WHERE `MapName`='%s';"; // Arg int:index int:index int:index string:MapName
 
 //Plugin cvars and cookies
 
@@ -75,7 +76,7 @@ char g_surfTimerEnabled[MAXPLAYERS + 1] = { 0 }; // 0 on Surfing 1 on after reac
 bool g_surfSpawnPointEnabled[2] = { false };
 float g_surfSpawnPointPos[2][3];
 
-#include "surf-utilities/menu.sp"
+#include "surf-utilities/newmenu.sp"
 #include "surf-utilities/hud.sp"
 
 public Plugin myinfo =
@@ -97,21 +98,24 @@ public void OnPluginStart()
         Updater_AddPlugin(UPDATE_URL);
     }
 	
+	LoadTranslations("surf-utilities.phrases.txt");
+	
 	HookEvent("player_spawn", Event_PlayerSpawn);
 	HookEvent("player_death", Event_PlayerDeath);
 	
 	g_cvarVersion = CreateConVar("sm_surfutil_version", VERSION, "Surf Utilities Plugin's Version", FCVAR_NOTIFY | FCVAR_REPLICATED);
-	g_cvarMode = CreateConVar("sm_surfutil_hudmode", "0", "Whether the surf timer shows on hint message or not globally.");
+	g_cvarMode = CreateConVar("sm_surfutil_hudmode", "1", "Whether the surf timer shows on hint message or not globally.");
 	
 	g_cookieHintMode = RegClientCookie("sm_surfutil_hint_mode", "Whether the surf timer shows on hint message or not.", CookieAccess_Protected);
 	SetCookiePrefabMenu(g_cookieHintMode, CookieMenu_YesNo_Int, "Surf Hint Mode");
 	
-	RegConsoleCmd("sm_my_rank", MenuMyRank, "A panel shows your record on this map.");
+	RegConsoleCmd("sm_myrank", MenuMyRank, "A panel shows your record on this map.");
 	RegConsoleCmd("sm_mr", MenuMyRank, "A panel shows your record on this map.");
-	RegConsoleCmd("sm_rank", MenuRank, "A panel shows server top record on this map.");
-	RegConsoleCmd("sm_wr", MenuRank, "A panel shows server top record on this map.");
+	RegConsoleCmd("sm_rank", MenuWorldRank, "A panel shows server top record on this map.");
+	RegConsoleCmd("sm_wr", MenuWorldRank, "A panel shows server top record on this map.");
 	
 	RegConsoleCmd("sm_setspawnpoint", CommandSetSpawnPoint, "A Command which sets your position to SpawnPoint (Removal should be done manually)");
+	RegConsoleCmd("sm_resetspawnpoint", CommandResetSpawnPoint, "A command which resets your spawnpoint.");
 	
 	g_syncHud = CreateHudSynchronizer();
 }
@@ -146,16 +150,6 @@ public void OnClientDisconnect(int client)
 		}
 	ClearSyncHud(client, g_syncHud);
 }
-
-/*
-public void OnClientCookiesCached(int client)
-{
-	char buffer[5];
-	GetClientCookie(client, g_cookieHintMode, buffer, sizeof(buffer));
-	if(buffer[0] == '\0')
-		g_cookieClientHintMode[client] = GetConVarInt(g_cvarMode);
-}
-*/
 
 public void OnMapStart()
 {
@@ -193,25 +187,6 @@ public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast
 			g_cookieClientHintMode[client] = StringToInt(buffer);
 		}
 	}
-	
-	/* Not Implemented
-	if(Zone_CheckIfZoneExists("surf_spawn_1", true) && Zone_CheckIfZoneExists("surf_spawn_2", true))
-	{
-		int clientTeam = GetClientTeam(client);
-		float pos[3];
-		
-		if(clientTeam == 2)
-		{
-			Zone_GetZonePosition("surf_spawn_1", false, pos);
-			TeleportEntity(client, pos, NULL_VECTOR, NULL_VECTOR);
-		}
-		else if(clientTeam == 3)
-		{
-			Zone_GetZonePosition("surf_spawn_2", false, pos);
-			TeleportEntity(client, pos, NULL_VECTOR, NULL_VECTOR);
-		}
-	}
-	*/
 	
 	if(g_surfSpawnPointEnabled[0])
 	{
@@ -387,6 +362,33 @@ public Action CommandSetSpawnPoint(int client, int args)
 	return Plugin_Handled;
 }
 
+public Action CommandResetSpawnPoint(int client, int args)
+{
+	if(args != 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_resetspawnpoint [0-1] (0 for RED&T, 1 for BLU&CT)");
+		return Plugin_Handled;
+	}
+	
+	char buffer[16];
+	int index;
+	
+	GetCmdArg(1, buffer, sizeof(buffer));
+	index = StringToInt(buffer);
+	
+	if(index < 0 || index > 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_resetspawnpoint [0-1] (0 for RED&T, 1 for BLU&CT)");
+		return Plugin_Handled;
+	}
+	
+	SurfResetSpawnPoint(index);
+	SurfGetSpawnPoint();
+	
+	ReplyToCommand(client, "[SM] It has been resetted successfully.");
+	
+	return Plugin_Handled;
+}
 
 ///////////////////////////
 // Database Functions
@@ -678,6 +680,44 @@ void SurfSetSpawnPoint(int index, const float Pos[3])
 }
 
 public void T_SurfSetSpawnPoint(Database db, DBResultSet results, const char[] error, any data)
+{
+	if (db == null || results == null || error[0] != '\0')
+	{
+		LogError("Query failed! %s", error);
+		if(results != null)
+			delete results;
+		return;
+	}
+	
+	delete results;
+	
+	return;
+}
+
+void SurfResetSpawnPoint(int index)
+{
+	if(index < 0 || index > 1)
+		return;
+	
+	char query[256];
+	char unescapedMap[32];
+	char Map[65];
+	
+	GetCurrentMap(unescapedMap, sizeof(unescapedMap));
+	if(!SQL_EscapeString(g_hDatabase, unescapedMap, Map, sizeof(Map)))
+	{
+		LogError("Escape Error");
+		return;
+	}
+	
+	FormatEx(query, sizeof(query), sql_updateToNullSpawnPointByMapName, index, index, index, Map);
+	
+	g_hDatabase.Query(T_SurfResetSpawnPoint, query);
+	
+	return;
+}
+
+public void T_SurfResetSpawnPoint(Database db, DBResultSet results, const char[] error, any data)
 {
 	if (db == null || results == null || error[0] != '\0')
 	{
