@@ -4,11 +4,10 @@
 	{
 		"Version"
 		{
-			"Latest"	"1.4.0"
+			"Latest"	"1.4.1"
 		}
 		
-		"Notes"	"Recreated Menu Plugin (No crash and more efficient)"
-		"Notes"	"Minor Translation Support (for menu)"
+		"Notes"	"Speedometer"
 	}
 	
 	"Files"

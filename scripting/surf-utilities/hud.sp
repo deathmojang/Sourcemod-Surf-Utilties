@@ -38,9 +38,6 @@ public Action SurfPrepareAdvisor(Handle timer, any data)
 public Action SurfShowHud(Handle timer, any serial)
 {
 	int client = GetClientFromSerial(serial);
-	int minute;
-	float second;
-	char buffer[256];
 	
 	if(client == 0)
 	{
@@ -60,16 +57,25 @@ public Action SurfShowHud(Handle timer, any serial)
 		return Plugin_Continue;
 	}
 	
+	char buffer[256];
+	float vecVelocity[3];
+	float velocity;
+	float second;
+	int minute;
+	
 	GetClientName(client, buffer, sizeof(buffer));
 	GetCurrentElapsedTime(client, minute, second);
 	
+	GetEntPropVector(client, Prop_Data, "m_vecVelocity", vecVelocity);
+	velocity = SquareRoot(Pow(vecVelocity[0], 2.0) + Pow(vecVelocity[1], 2.0));
+	
 	if (g_surfPersonalBest[client] != 0.0)
 	{
-		ShowSyncHudText(client, g_syncHud, "Time: %02d:%06.3fs\nPB: %02d:%06.3fs\nPlayer: %s", minute, second, g_surfPersonalBestMinute[client], g_surfPersonalBestSecond[client], buffer);
+		ShowSyncHudText(client, g_syncHud, "%T", "SurfHudPB", client, minute, second, g_surfPersonalBestMinute[client], g_surfPersonalBestSecond[client], velocity, buffer);
 	}
 	else
 	{
-		ShowSyncHudText(client, g_syncHud, "Time: %02d:%06.3fs\nPlayer: %s", minute, second, buffer);
+		ShowSyncHudText(client, g_syncHud, "%T", "SurfHud", client, minute, second, velocity, buffer);
 	}
 	
 	return Plugin_Continue;
@@ -92,9 +98,6 @@ public Action SurfShowHintBefore(Handle timer, any serial)
 public Action SurfShowHint(Handle timer, any serial)
 {
 	int client = GetClientFromSerial(serial);
-	int minute;
-	float second;
-	char buffer[64];
 	
 	if(client == 0)
 	{
@@ -112,16 +115,25 @@ public Action SurfShowHint(Handle timer, any serial)
 		return Plugin_Continue;
 	}
 	
+	char buffer[256];
+	float vecVelocity[3];
+	float velocity;
+	float second;
+	int minute;
+	
 	GetClientName(client, buffer, sizeof(buffer));
 	GetCurrentElapsedTime(client, minute, second);
 	
+	GetEntPropVector(client, Prop_Data, "m_vecVelocity", vecVelocity);
+	velocity = SquareRoot(Pow(vecVelocity[0], 2.0) + Pow(vecVelocity[1], 2.0));
+	
 	if (g_surfPersonalBest[client] != 0.0)
 	{
-		PrintHintText(client, "Time: %02d:%06.3fs\nPB: %02d:%06.3fs\nPlayer: %s", minute, second, g_surfPersonalBestMinute[client], g_surfPersonalBestSecond[client], buffer);
+		PrintHintText(client, "%T", "SurfHudPB", client, minute, second, g_surfPersonalBestMinute[client], g_surfPersonalBestSecond[client], velocity, buffer);
 	}
 	else
 	{
-		PrintHintText(client, "Time: %02d:%06.3fs\nPlayer: %s", minute, second, buffer);
+		PrintHintText(client, "%T", "SurfHud", client, minute, second, velocity, buffer);
 	}
 	
 	return Plugin_Continue;
